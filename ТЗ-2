@@ -1,0 +1,55 @@
+В рамках данного технического задания вы продолжите самостоятельно работать над анализом игры Zombie Revolution. К вам обратились коллеги с несколькими продуктовыми и финансовыми гипотезами.
+Выполните задания и в качестве результата предоставьте свои SQL-запросы.
+
+Задание 1
+Факт: В ноябре и декабре 2022 года была опробована альтернативная стратегия привлечения клиентов.
+Проверьте следующую гипотезу: в ноябре и декабре 2022 года из-за более дорогой и таргетированной рекламы мы приобрели более “лояльных” игроков, которые больше времени посвящают нашей игре.
+
+Задание 2
+Рассчитайте K-factor нашей игры.
+Рассчитайте, сколько пользователей нам принесет одна будущая среднестатистическая когорта в результате.
+
+##Задание 1. Гипотеза подтвердилась - в ноябре и декабре 2022 года мы приобрели более «лояльных» игроков, которые больше времени посвящают нашей игре.
+
+select case when reg_date between '2022-11-01' and '2022-12-31' then 'когорта 11-12.2022' else 'остальные когорты' end as cogort
+    , avg (round(extract(epoch from end_session - start_session)/60)) as avg_session
+from skygame.users u
+    join skygame.game_sessions gs
+        on u.id_user=gs.id_user
+where (extract(epoch from end_session - start_session)/60)>5
+group by cogort
+-------------------------------
+
+##Задание 2.
+
+Рассчитайте K-factor нашей игры - 0.35.
+Рассчитайте, сколько пользователей нам принесет одна будущая среднестатистическая когорта в результате - 315 
+
+with cnt_ref as
+    (select 
+          count (r.id_user)::float/count (u.id_user) as avg_ref
+        , sum (case when ref_reg = '1' then 1.0 else 0.0 end)*100/count (ref_reg) as share_reg_friend
+        , (count (r.id_user)::float/count (u.id_user))*(sum (case when ref_reg = '1' then 1.0 else 0.0 end)/count(ref_reg)) as k_factor
+    from skygame.users u
+       full join skygame.referral r
+            on u.id_user=r.id_user
+    )
+,
+size_cohorts as
+        (select 
+              date_trunc ('month', reg_date) as mm
+            , count (u.id_user) as id_user
+        from skygame.users u
+            full join skygame.referral r
+                on u.id_user=r.id_user
+        group by mm
+        )
+,
+avg_cohorts as
+    (select sum (id_user)/count (mm) as avg_cohorts
+    from size_cohorts
+    )
+
+select 
+   round (k_factor*avg_cohorts)
+from cnt_ref, avg_cohorts
